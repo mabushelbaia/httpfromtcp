@@ -75,7 +75,6 @@ outer:
 
 		r.state++
 	case HeadersState:
-		fmt.Print("Starting Headers", string(b[read:]), "\n")
 		n, done, err := r.Headers.Parse(b[read:])
 		if err != nil {
 			return 0, err
