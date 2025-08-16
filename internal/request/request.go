@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/mabushelbaia/httpfromtcp/internal/headers"
 )
 
 var ErrorBadRequestLine = fmt.Errorf("bad request line")
@@ -15,12 +17,14 @@ type RequestState int
 
 const (
 	InitState RequestState = iota
+	HeadersState
 	DoneState
 	ErrorStaate
 )
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     headers.Headers
 	state       RequestState
 }
 
@@ -70,6 +74,19 @@ outer:
 		read += n
 
 		r.state++
+	case HeadersState:
+		fmt.Print("Starting Headers", string(b[read:]), "\n")
+		n, done, err := r.Headers.Parse(b[read:])
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return 0, nil
+		}
+		read += n
+		if done {
+			r.state++
+		}
 
 	case DoneState:
 		break outer
@@ -82,7 +99,8 @@ func (r *Request) done() bool {
 }
 func newRequest() *Request {
 	return &Request{
-		state: InitState,
+		state:   InitState,
+		Headers: headers.NewHeaders(),
 	}
 }
 func RequestFromReader(reader io.Reader) (*Request, error) {

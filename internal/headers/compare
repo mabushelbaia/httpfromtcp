@@ -1,0 +1,30 @@
+func (h Headers) Parse(data []byte) (int, bool, error) {
+	idx := bytes.Index(data, sep)
+	if idx == -1 {
+		// no complete line yet
+		return 0, false, nil
+	}
+
+	// If it's just CRLF, that means headers are finished
+	if idx == 0 {
+		return len(sep), true, nil
+	}
+
+	line := data[:idx]
+	parts := bytes.SplitN(line, []byte(":"), 2)
+	if len(parts) != 2 {
+		return 0, false, ErrorBadFL
+	}
+
+	key := bytes.TrimSpace(parts[0])
+	value := bytes.TrimSpace(parts[1])
+
+	if !validKey(key) {
+		return 0, false, ErrorBadHeader
+	}
+
+	// overwrite instead of append
+	h.Set(string(key), string(value))
+
+	return idx + len(sep), false, nil
+}
