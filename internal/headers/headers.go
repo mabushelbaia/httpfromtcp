@@ -16,8 +16,9 @@ var headerKeyRe = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+\-.\^_` + "`" + `|~]+$`
 
 type Headers map[string]string
 
-func (h Headers) Get(key string) string {
-	return h[strings.ToLower(key)]
+func (h Headers) Get(key string) (string, bool) {
+	val, ok := h[strings.ToLower(key)]
+	return val, ok
 }
 
 func (h Headers) Set(key, val string) {
@@ -60,11 +61,11 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 			return 0, false, ErrorBadFL
 		}
 
-		key := bytes.TrimSpace(parts[0])
+		key := bytes.TrimLeft(parts[0], " ")
 		value := bytes.TrimSpace(parts[1])
 
 		if !validKey(key) {
-			return 0, false, ErrorBadHeader
+			return 0, false, ErrorBadKey
 		}
 
 		// overwrite instead of append

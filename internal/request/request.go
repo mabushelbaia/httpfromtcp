@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/mabushelbaia/httpfromtcp/internal/headers"
 )
@@ -18,6 +19,7 @@ type RequestState int
 const (
 	InitState RequestState = iota
 	HeadersState
+	BodyState
 	DoneState
 	ErrorStaate
 )
@@ -25,6 +27,7 @@ const (
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
+	Body        []byte
 	state       RequestState
 }
 
@@ -59,40 +62,72 @@ func (cr *chunkReader) Read(p []byte) (n int, err error) {
 }
 func (r *Request) Parse(b []byte) (int, error) {
 	read := 0
-outer:
-	switch r.state {
-	case InitState:
-		rl, n, err := parseRequestLine(b[read:])
-		if err != nil {
-			return 0, err
-		}
 
-		if n == 0 {
+outer:
+	for {
+		switch r.state {
+		case InitState:
+			rl, n, err := parseRequestLine(b[read:])
+			if err != nil {
+				return 0, err
+			}
+			if n == 0 {
+				break outer // need more data
+			}
+			r.RequestLine = *rl
+			read += n
+			r.state++
+
+		case HeadersState:
+			n, done, err := r.Headers.Parse(b[read:])
+			if err != nil {
+				return 0, err
+			}
+			if n == 0 {
+				break outer
+			}
+			read += n
+			if done {
+				r.state++
+			}
+
+		case BodyState:
+			val, ok := r.Headers.Get("Content-Length")
+			if !ok {
+				// No Content-Length, slurp everything and finish
+				r.Body = append(r.Body, b[read:]...)
+				read = len(b)
+				r.state++
+				break outer
+			}
+
+			bodySize, err := strconv.Atoi(val)
+			if err != nil {
+				return 0, fmt.Errorf("invalid Content-Length: %w", err)
+			}
+
+			remaining := min(bodySize-len(r.Body), len(b[read:]))
+			if remaining <= 0 {
+				return 0, fmt.Errorf("body overflow")
+			}
+
+			r.Body = append(r.Body, b[read:read+remaining]...)
+			read += remaining
+
+			if len(r.Body) == bodySize {
+				r.state++
+			} else {
+				break outer // need more data
+			}
+
+		case DoneState:
 			break outer
 		}
-		r.RequestLine = *rl
-		read += n
-
-		r.state++
-	case HeadersState:
-		n, done, err := r.Headers.Parse(b[read:])
-		if err != nil {
-			return 0, err
-		}
-		if n == 0 {
-			return 0, nil
-		}
-		read += n
-		if done {
-			r.state++
-		}
-
-	case DoneState:
-		break outer
 	}
 
 	return read, nil
 }
+
 func (r *Request) done() bool {
 	return r.state == DoneState || r.state == ErrorStaate
 }
