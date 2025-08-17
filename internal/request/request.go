@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/mabushelbaia/httpfromtcp/internal/headers"
 )
@@ -197,4 +198,26 @@ func parseRequestLine(b []byte) (*RequestLine, int, error) {
 		RequestTarget: string(target),
 		HttpVersion:   string(version),
 	}, read, nil
+}
+
+func (r *Request) String() string {
+	var sb strings.Builder
+
+	// First line
+	fmt.Fprintf(&sb, "%s %s HTTP/%s\r\n", r.RequestLine.Method, r.RequestLine.RequestTarget, r.RequestLine.HttpVersion)
+
+	// Headers
+	r.Headers.ForEach(func(key, value string) {
+		fmt.Fprintf(&sb, "%s: %s\r\n", key, value)
+	})
+
+	// Empty line after headers
+	sb.WriteString("\r\n")
+
+	// Body if present
+	if len(r.Body) > 0 {
+		sb.WriteString(string(r.Body))
+	}
+
+	return sb.String()
 }
