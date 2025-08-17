@@ -203,19 +203,17 @@ func parseRequestLine(b []byte) (*RequestLine, int, error) {
 func (r *Request) String() string {
 	var sb strings.Builder
 
-	// First line
-	fmt.Fprintf(&sb, "%s %s HTTP/%s\r\n", r.RequestLine.Method, r.RequestLine.RequestTarget, r.RequestLine.HttpVersion)
+	fmt.Fprintf(&sb, "Method: %s\n", r.RequestLine.Method)
+	fmt.Fprintf(&sb, "Target: %s\n", r.RequestLine.RequestTarget)
+	fmt.Fprintf(&sb, "HTTP Version: %s\n", r.RequestLine.HttpVersion)
 
-	// Headers
+	sb.WriteString("Headers:\n")
 	r.Headers.ForEach(func(key, value string) {
-		fmt.Fprintf(&sb, "%s: %s\r\n", key, value)
+		fmt.Fprintf(&sb, "  %s: %s\n", key, value)
 	})
 
-	// Empty line after headers
-	sb.WriteString("\r\n")
-
-	// Body if present
 	if len(r.Body) > 0 {
+		sb.WriteString("Body:\n")
 		sb.WriteString(string(r.Body))
 	}
 
