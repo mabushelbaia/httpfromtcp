@@ -2,19 +2,29 @@ package server
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync/atomic"
 
+	"github.com/mabushelbaia/httpfromtcp/internal/request"
 	"github.com/mabushelbaia/httpfromtcp/internal/response"
 )
 
 type Server struct {
 	listener net.Listener
 	closed   atomic.Bool
+	handler  Handler
 }
 
-func Serve(port int) (*Server, error) {
+type HandlerError struct {
+	StatusCode response.StatusCode
+	Message    string
+}
+
+type Handler func(w *response.Writer, req *request.Request) *HandlerError
+
+func Serve(port uint16, h Handler) (*Server, error) {
 
 	ln, err := net.Listen(
 		"tcp",
@@ -26,6 +36,7 @@ func Serve(port int) (*Server, error) {
 
 	s := &Server{
 		listener: ln,
+		handler:  h,
 	}
 	go s.listen()
 
@@ -53,9 +64,39 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-	body := []byte("{Hello World!}\r\n")
+
+	req, err := request.RequestFromReader(conn)
+	if err != nil {
+		hErr := &HandlerError{
+			StatusCode: response.BadRequest,
+			Message:    err.Error(),
+		}
+		hErr.write(conn)
+		return
+	}
+	writer := response.Writer{
+		Conn:  conn,
+		State: response.StatusLine,
+	}
+
+	hErr := s.handler(&writer, req)
+
+	if hErr != nil {
+		hErr.write(conn)
+		return
+	}
+
+}
+
+func (hErr *HandlerError) write(w io.Writer) {
+	// status line
+	response.WriteStatusLine(w, hErr.StatusCode)
+
+	// headers
+	body := []byte(hErr.Message)
 	hdrs := response.GetDefaultHeaders(len(body))
-	response.WriteStatusLine(conn, response.Ok)
-	response.WriteHeaders(conn, hdrs)
-	conn.Write(body)
+	response.WriteHeaders(w, hdrs)
+
+	// body
+	w.Write(body)
 }

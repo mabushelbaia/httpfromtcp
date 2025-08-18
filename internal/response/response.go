@@ -1,7 +1,9 @@
 package response
 
 import (
+	"fmt"
 	"io"
+	"net"
 	"strconv"
 
 	"github.com/mabushelbaia/httpfromtcp/internal/headers"
@@ -15,6 +17,63 @@ const (
 	ServerError StatusCode = 500
 )
 
+type WriterState int
+
+const (
+	StatusLine WriterState = iota
+	Headers
+	Body
+)
+
+type Writer struct {
+	State WriterState
+	Conn  net.Conn
+}
+
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
+	if w.State != StatusLine {
+		return fmt.Errorf("status line already written or wrong order")
+	}
+	fmt.Fprintf(w.Conn, "HTTP/1.1 %d %s\r\n", statusCode, statusText(statusCode))
+	w.State++
+	return nil
+}
+
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
+	if w.State != Headers {
+		return fmt.Errorf("headers line already written or wrong order")
+	}
+	headers.ForEach(func(key, value string) {
+		fmt.Fprintf(w.Conn, "%s: %s\r\n", key, value)
+	})
+	fmt.Fprint(w.Conn, "\r\n")
+	w.State++
+	return nil
+}
+
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	if w.State != Body {
+		return 0, fmt.Errorf("body line already written or wrong order")
+	}
+	_, err := w.Conn.Write(p)
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func statusText(statusCode StatusCode) string {
+	switch statusCode {
+	case Ok:
+		return "OK"
+	case BadRequest:
+		return "Bad Request"
+	case ServerError:
+		return "Internal Server Error"
+	default:
+		return "Internal Server Error"
+	}
+}
 func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 	var line string
 	switch statusCode {

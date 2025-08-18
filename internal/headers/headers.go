@@ -28,6 +28,10 @@ func (h Headers) Set(key, val string) {
 		h[strings.ToLower(key)] = val
 	}
 }
+
+func (h Headers) Replace(key, val string) {
+	h[strings.ToLower(key)] = val
+}
 func validKey(key []byte) bool {
 	return headerKeyRe.Match(key) && (len(key) >= 1) && !bytes.HasSuffix(key, []byte(" "))
 }
